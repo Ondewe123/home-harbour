@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
-import { supabase } from '@/lib/supabase/client';
+import { supabase } from '@/lib/supabase/client'; // used for signInWithPassword after signup
 
 export default function SignupPage() {
   const [form, setForm] = useState({ householdName: '', displayName: '', email: '', password: '' });
@@ -21,28 +21,26 @@ export default function SignupPage() {
     setLoading(true);
 
     try {
-      const { data: authData, error: authError } = await supabase.auth.signUp({
+      const res = await fetch('/api/auth/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: form.email,
+          password: form.password,
+          displayName: form.displayName,
+          householdName: form.householdName,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Sign up failed');
+
+      // Sign in immediately after account creation
+      const { error: signInError } = await supabase.auth.signInWithPassword({
         email: form.email,
         password: form.password,
       });
-      if (authError) throw authError;
-      if (!authData.user) throw new Error('No user returned');
-
-      const { data: household, error: householdError } = await supabase
-        .from('households')
-        .insert([{ name: form.householdName, created_by: authData.user.id }])
-        .select()
-        .single();
-      if (householdError) throw householdError;
-
-      const { error: userError } = await supabase.from('users').insert([{
-        auth_id: authData.user.id,
-        email: form.email,
-        display_name: form.displayName,
-        household_id: household.id,
-        role: 'admin',
-      }]);
-      if (userError) throw userError;
+      if (signInError) throw signInError;
 
       router.push('/pantry');
     } catch (err) {
