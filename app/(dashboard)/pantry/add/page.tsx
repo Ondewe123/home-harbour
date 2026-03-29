@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { supabase } from '@/lib/supabase/client';
 import { useAuth } from '@/context/auth-context';
 import { Brand, Shop } from '@/lib/types';
+import InlineAdd from '@/components/shared/inline-add';
 
 const CATEGORIES = [
   'Grains & Cereals', 'Dairy', 'Meat & Fish', 'Fruits & Vegetables',
@@ -52,6 +53,34 @@ export default function AddPantryItemPage() {
     setPhotoPreview(URL.createObjectURL(file));
   };
 
+  const addBrandInline = async (name: string) => {
+    if (!household) return;
+    const { data } = await supabase
+      .from('brands')
+      .insert([{ household_id: household.id, name }])
+      .select()
+      .single();
+    if (data) {
+      const newBrand = data as Brand;
+      setBrands(prev => [...prev, newBrand].sort((a, b) => a.name.localeCompare(b.name)));
+      setForm(prev => ({ ...prev, brand_id: newBrand.id }));
+    }
+  };
+
+  const addShopInline = async (name: string) => {
+    if (!household) return;
+    const { data } = await supabase
+      .from('shops')
+      .insert([{ household_id: household.id, name }])
+      .select()
+      .single();
+    if (data) {
+      const newShop = data as Shop;
+      setShops(prev => [...prev, newShop].sort((a, b) => a.name.localeCompare(b.name)));
+      setForm(prev => ({ ...prev, typical_shop_id: newShop.id }));
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || !household) return;
@@ -62,16 +91,13 @@ export default function AddPantryItemPage() {
       let photo_url = '';
       let photo_storage_path = '';
 
-      // Upload photo if selected
       if (photo) {
         const ext = photo.name.split('.').pop();
         const path = `${household.id}/items/${Date.now()}.${ext}`;
         const { error: uploadError } = await supabase.storage
           .from('pantry-photos')
           .upload(path, photo, { upsert: true });
-
         if (uploadError) throw uploadError;
-
         const { data: urlData } = supabase.storage.from('pantry-photos').getPublicUrl(path);
         photo_url = urlData.publicUrl;
         photo_storage_path = path;
@@ -119,7 +145,7 @@ export default function AddPantryItemPage() {
           </div>
         )}
 
-        {/* Photo upload */}
+        {/* Photo */}
         <div>
           <label className="block text-sm font-medium text-harbour-text-dim mb-2">Photo</label>
           <div className="flex items-center gap-4">
@@ -168,22 +194,26 @@ export default function AddPantryItemPage() {
 
         {/* Brand */}
         <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-harbour-text-dim">Brand</label>
+          <div className="flex items-center justify-between">
+            <label className="block text-sm font-medium text-harbour-text-dim">Brand</label>
+            <InlineAdd placeholder="New brand name" onSave={addBrandInline} />
+          </div>
           <select value={form.brand_id} onChange={update('brand_id')} className="input-field">
             <option value="">No brand / Generic</option>
             {brands.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
           </select>
-          <p className="text-xs text-harbour-border">Add brands in Settings if not listed</p>
         </div>
 
         {/* Shop */}
         <div className="space-y-1.5">
-          <label className="block text-sm font-medium text-harbour-text-dim">Usual Shop</label>
+          <div className="flex items-center justify-between">
+            <label className="block text-sm font-medium text-harbour-text-dim">Usual Shop</label>
+            <InlineAdd placeholder="New shop name" onSave={addShopInline} />
+          </div>
           <select value={form.typical_shop_id} onChange={update('typical_shop_id')} className="input-field">
             <option value="">Not specified</option>
             {shops.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
-          <p className="text-xs text-harbour-border">Add shops in Settings if not listed</p>
         </div>
 
         {/* Notes */}
