@@ -19,7 +19,13 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
+      const timeout = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Connection timed out. Check your internet or Supabase project status.')), 10000)
+      );
+
+      const signIn = supabase.auth.signInWithPassword({ email, password });
+      const { error: authError } = await Promise.race([signIn, timeout]);
+
       if (authError) throw authError;
       router.push('/pantry');
     } catch (err) {
