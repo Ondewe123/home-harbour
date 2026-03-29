@@ -3,16 +3,17 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { Loader2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase/client';
 
 export default function SignupPage() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [householdName, setHouseholdName] = useState('');
-  const [displayName, setDisplayName] = useState('');
+  const [form, setForm] = useState({ householdName: '', displayName: '', email: '', password: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+
+  const update = (field: string) => (e: React.ChangeEvent<HTMLInputElement>) =>
+    setForm((prev) => ({ ...prev, [field]: e.target.value }));
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -20,136 +21,98 @@ export default function SignupPage() {
     setLoading(true);
 
     try {
-      // Sign up with Supabase Auth
       const { data: authData, error: authError } = await supabase.auth.signUp({
-        email,
-        password,
+        email: form.email,
+        password: form.password,
       });
-
       if (authError) throw authError;
       if (!authData.user) throw new Error('No user returned');
 
-      // Create household
-      const { data: householdData, error: householdError } = await supabase
+      const { data: household, error: householdError } = await supabase
         .from('households')
-        .insert([
-          {
-            name: householdName,
-            created_by: authData.user.id,
-          },
-        ])
+        .insert([{ name: form.householdName, created_by: authData.user.id }])
         .select()
         .single();
-
       if (householdError) throw householdError;
 
-      // Create user record
-      const { error: userError } = await supabase.from('users').insert([
-        {
-          auth_id: authData.user.id,
-          email,
-          display_name: displayName,
-          household_id: householdData.id,
-          role: 'admin',
-        },
-      ]);
-
+      const { error: userError } = await supabase.from('users').insert([{
+        auth_id: authData.user.id,
+        email: form.email,
+        display_name: form.displayName,
+        household_id: household.id,
+        role: 'admin',
+      }]);
       if (userError) throw userError;
 
       router.push('/pantry');
-    } catch (error) {
-      setError(error instanceof Error ? error.message : 'An error occurred');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Sign up failed. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
+  const fields = [
+    { id: 'householdName', label: 'Household Name', placeholder: 'e.g. The Smith Home', type: 'text', autoComplete: 'organization' },
+    { id: 'displayName', label: 'Your Name', placeholder: 'e.g. John Smith', type: 'text', autoComplete: 'name' },
+    { id: 'email', label: 'Email Address', placeholder: 'you@example.com', type: 'email', autoComplete: 'email' },
+    { id: 'password', label: 'Password', placeholder: '••••••••', type: 'password', autoComplete: 'new-password' },
+  ] as const;
+
   return (
-    <div className="space-y-6 p-6">
+    <div className="animate-fade-in space-y-8">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Create Home Harbour</h1>
-        <p className="mt-2 text-sm text-gray-600">Set up your household pantry management</p>
+        <div className="flex items-center gap-2 mb-6 lg:hidden">
+          <svg className="w-7 h-7 text-brand-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12l8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" />
+          </svg>
+          <span className="font-heading text-lg font-semibold text-harbour-text">Home Harbour</span>
+        </div>
+        <h1 className="font-heading text-2xl font-semibold text-harbour-text">Create your household</h1>
+        <p className="mt-1.5 text-sm text-harbour-muted">Set up Home Harbour for your family</p>
       </div>
 
       <form onSubmit={handleSignup} className="space-y-4">
         {error && (
-          <div className="rounded-lg bg-red-50 p-3 text-sm text-red-700">
+          <div className="flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2.5 text-sm text-red-400">
+            <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+            </svg>
             {error}
           </div>
         )}
 
-        <div>
-          <label htmlFor="household" className="block text-sm font-medium text-gray-700">
-            Household Name
-          </label>
-          <input
-            id="household"
-            type="text"
-            value={householdName}
-            onChange={(e) => setHouseholdName(e.target.value)}
-            placeholder="e.g., Smith Family"
-            required
-            className="mt-1"
-          />
-        </div>
+        {fields.map(({ id, label, placeholder, type, autoComplete }) => (
+          <div key={id} className="space-y-1.5">
+            <label htmlFor={id} className="block text-sm font-medium text-harbour-text-dim">{label}</label>
+            <input
+              id={id}
+              type={type}
+              value={form[id]}
+              onChange={update(id)}
+              placeholder={placeholder}
+              required
+              autoComplete={autoComplete}
+              className="input-field"
+            />
+          </div>
+        ))}
 
-        <div>
-          <label htmlFor="displayName" className="block text-sm font-medium text-gray-700">
-            Your Name
-          </label>
-          <input
-            id="displayName"
-            type="text"
-            value={displayName}
-            onChange={(e) => setDisplayName(e.target.value)}
-            placeholder="e.g., John Smith"
-            required
-            className="mt-1"
-          />
-        </div>
-
-        <div>
-          <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-            Email
-          </label>
-          <input
-            id="email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="you@example.com"
-            required
-            className="mt-1"
-          />
-        </div>
-
-        <div>
-          <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-            Password
-          </label>
-          <input
-            id="password"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="••••••••"
-            required
-            className="mt-1"
-          />
-        </div>
-
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full rounded-lg bg-primary-600 py-2 font-medium text-white hover:bg-primary-700 disabled:opacity-50"
-        >
-          {loading ? 'Creating account...' : 'Create Account'}
+        <button type="submit" disabled={loading} className="btn-primary w-full mt-2">
+          {loading ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Creating account...
+            </>
+          ) : (
+            'Create Account'
+          )}
         </button>
       </form>
 
-      <p className="text-center text-sm text-gray-600">
+      <p className="text-center text-sm text-harbour-muted">
         Already have an account?{' '}
-        <Link href="/login" className="font-medium text-primary-600 hover:text-primary-700">
+        <Link href="/login" className="font-medium text-brand-400 hover:text-brand-300 transition-colors duration-200">
           Sign in
         </Link>
       </p>
